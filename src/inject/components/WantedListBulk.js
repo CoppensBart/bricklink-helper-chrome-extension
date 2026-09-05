@@ -28,6 +28,13 @@ const Status = ({ step, steps, message }) => {
 };
 
 
+const normalizeListName = (name) => {
+  return (name || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+};
+ 
+
 const MergeAction = ({ onCancel, onFinish, lists }) => {
   const [form] = Form.useForm();
   const [progress, setProgress] = useState(null);
@@ -42,7 +49,7 @@ const MergeAction = ({ onCancel, onFinish, lists }) => {
   };
 
   const handleMerge = async ({ name, condition, maxprice, qwant, qhave, notify }) => {
-    const steps = lists.length + 2;
+    const steps = lists.length + 3;
     let step = 0;
     const mergedItems = {};
     for (const list of lists) {
@@ -109,6 +116,9 @@ const MergeAction = ({ onCancel, onFinish, lists }) => {
           if (merged.wantedNotify !== item.wantedNotify) {
             merged.wantedNotify = {no: 'N', yes: 'Y'}[notify];
           }
+
+          // track source list
+          merged.sourceLists.add(`${normalizeListName(list.name)} [${item.wantedQty}]`);
         } else {
           mergedItems[key] = {
             itemID: item.itemID,
@@ -119,6 +129,7 @@ const MergeAction = ({ onCancel, onFinish, lists }) => {
             wantedNotify: item.wantedNotify,
             wantedRemarks: item.wantedRemarks,
             wantedPrice: item.wantedPrice,
+            sourceLists: new Set([`${normalizeListName(list.name)} [${item.wantedQty}]`])
           };
         }
       });
@@ -127,6 +138,22 @@ const MergeAction = ({ onCancel, onFinish, lists }) => {
     setProgress({ step, steps, message: `Creating new wanted list "${name}"...`});
     step += 1
     const newWantedListId = await createWantedList(name);
+
+    // Build final merged list with source remarks injected
+    setProgress({ step, steps, message: `Parsing wanted list names in remark...`});
+    step += 1;
+    for (const [key, item] of Object.entries(mergedItems)) {
+      if (item.sourceLists instanceof Set) {
+        const uniqueSources = [...item.sourceLists];
+        item.wantedRemarks = uniqueSources.join(' | ');
+        delete item.sourceLists;
+      }
+    }
+    /*
+    for (const item of Object.values(mergedItems)) {
+      delete item.sourceLists;
+    }
+    */
 
     setProgress({ step, steps, message: `Adding items to the new wanted list...`});
     step += 1;
